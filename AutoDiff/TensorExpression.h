@@ -102,7 +102,6 @@ namespace homo {
 #else
 			cudaFreeHost(ptr.ptr);
 #endif
-			cuda_error_check;
 		}
 		T* data(void) {
 			return (T*)ptr.ptr;

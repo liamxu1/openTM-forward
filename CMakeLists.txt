@@ -4,6 +4,7 @@ message(STATUS "cmake version ${CMAKE_VERSION}")
 
 project(openTM)
 
+set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -gencode arch=compute_89,code=sm_89")
 set(FETCHCONTENT_QUIET FALSE)
 
 #set(ENV{http_proxy} "127.0.0.1:4780")
@@ -107,7 +108,7 @@ message(STATUS "deprecated sources : ${deprefiles}")
 add_library(cubin STATIC ${cudafiles})
 set_target_properties(cubin PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
 set_target_properties(cubin PROPERTIES CUDA_RESOLVE_DEVICE_SYMBOLS ON)
-set_target_properties(cubin PROPERTIES CUDA_ARCHITECTURES "61;75;86")
+set_target_properties(cubin PROPERTIES CUDA_ARCHITECTURES "89-real")
 # set_target_properties(cubin PROPERTIES POSITION_INDEPENDENT_CODE ON)
 target_compile_options(cubin PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:
 	--relocatable-device-code=true
@@ -140,7 +141,7 @@ file(GLOB cppfiles
 
 add_executable(openTM ${cppfiles})
 target_include_directories(openTM PUBLIC ${CMAKE_CUDA_TOOLKIT_INCLUDE_DIRECTORIES})
-set_target_properties(openTM PROPERTIES CUDA_ARCHITECTURES "61;75;86")
+set_target_properties(openTM PROPERTIES CUDA_ARCHITECTURES "89-real")
 target_link_libraries(openTM PRIVATE cubin)
 # target_link_libraries(openTM PRIVATE OpenVDB::openvdb)
 target_include_directories(openTM PUBLIC ${openvdb_SOURCE_DIR}/openvdb/openvdb)
