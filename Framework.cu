@@ -243,3 +243,119 @@ std::vector<float> runCustom(cfg::HomoConfig config, std::vector<float> *rho0 = 
 	return rho;
 }
 
+void calculateThermalProperty(cfg::HomoConfig config, const std::string& filename, const std::string& outpath, float threshold) {
+	setPathPrefix(config.outprefix);
+	Homogenization_H hom(config);
+
+	int size = config.reso[0];
+	if (config.reso[1] != size || config.reso[2] != size) {
+		printf("Error: voxel file should have same edge length\n");
+		return;
+	}
+	std::ifstream file(filename, std::ios::binary);
+	if (!file.is_open())
+	{
+		printf("Error: cannot open file %s\n", filename.c_str());
+		return;
+	}
+
+	const int dim[3] = {size, size, size};
+	const int total_voxels = dim[0] * dim[1] * dim[2];
+
+	std::vector<float> density(total_voxels, 0.f);
+	file.read(reinterpret_cast<char *>(density.data()), total_voxels * sizeof(float));
+	file.close();
+
+	if (threshold > 0 && threshold < 1) {
+		for (int i = 0; i < total_voxels; i++) {
+			density[i] = (density[i] > threshold) ? 1.f : 0.f;
+		}
+	}
+
+	var_tsexp_t<> rho(dim[0], dim[1], dim[2]);
+	rho.value().fromHost(density);
+	auto rhop = rho * (config.heatRatio[0] - config.heatRatio[1]) + config.heatRatio[1];
+	// rho.value().toVdb(getPath("rho"));
+	heat_tensor_t<float, decltype(rhop)> Ch(hom, rhop);
+	Ch.eval();
+
+	std::ofstream file_out(outpath);
+	for (int i = 0; i < 3; i++) {
+		for (int j = 0; j < 3; j++) {
+			file_out << Ch.H_[i][j] << ((j == 2) ? "\n" : "\t");
+		}
+	}
+	file_out.close();
+	freeMem();
+}
+
+void calculateThermalProperty_vdb(cfg::HomoConfig config, const std::string& filename, const std::string& outpath) {
+	setPathPrefix(config.outprefix);
+
+	var_tsexp_t<> rho(config.reso[0], config.reso[1], config.reso[2]);
+	std::cerr << config.reso[0] << " " << config.reso[1] << " " << config.reso[2] << std::endl;
+	rho.value().fromVdb(filename, false);
+	auto rhop = rho * (config.heatRatio[0] - config.heatRatio[1]) + config.heatRatio[1];
+	// rho.value().toVdb(getPath("rho"));
+	// std::cerr << "start calculating C\n";
+	Homogenization_H hom(config);
+	heat_tensor_t<float, decltype(rhop)> Ch(hom, rhop);
+	Ch.eval();
+
+	std::ofstream file_out(outpath);
+	for (int i = 0; i < 3; i++) {
+		for (int j = 0; j < 3; j++) {
+			file_out << Ch.H_[i][j] << ((j == 2) ? "\n" : "\t");
+		}
+	}
+	file_out.close();
+	freeMem();
+}
+
+void writeFloatTensorToVoxelFile(const std::vector<float>& flattened_array, int size, const std::string& filename) {
+    const int total_voxels = size * size * size;
+    if (flattened_array.size() != static_cast<size_t>(total_voxels)) {
+        std::cerr << "flattened_array size mismatch. Expected " << total_voxels << " elements." << std::endl;
+        return;
+    }
+
+    std::string file_path = filename;
+
+    std::ofstream file_out(file_path, std::ios::binary);
+    if (!file_out.is_open()) {
+        std::cerr << "Failed to open file for writing: " << file_path << std::endl;
+        return;
+    }
+
+    file_out.write(reinterpret_cast<const char*>(flattened_array.data()), total_voxels * sizeof(float));
+    file_out.close();
+}
+
+void vdb2voxel(const std::string& vdb_path, const std::string& out_path, int reso)
+{
+	homo::Tensor<float> v(reso, reso, reso);
+	v.fromVdb(vdb_path, false);
+	std::vector<float> v_array(reso * reso * reso, 0.f);
+	v.toHost(v_array);
+	writeFloatTensorToVoxelFile(v_array, reso, out_path);
+}
+
+void voxel2vdb(const std::string& voxel_path, const std::string& out_path, int reso)
+{
+	std::ifstream file(voxel_path, std::ios::binary);
+	if (!file.is_open())
+	{
+		printf("Error: cannot open file %s\n", voxel_path.c_str());
+		return;
+	}
+	const int dim[3] = { reso, reso, reso };
+	const int total_voxels = dim[0] * dim[1] * dim[2];
+
+	std::vector<float> density(total_voxels, 0.f);
+	file.read(reinterpret_cast<char *>(density.data()), total_voxels * sizeof(float));
+	file.close();
+
+	homo::Tensor<float> v(reso, reso, reso);
+	v.fromHost(density);
+	v.toVdb(out_path);
+}
